@@ -105,6 +105,16 @@
                         }
                     </select>
                 </div>
+                <div class="col-md-3">
+                    <label class="form-label small">Preset (optional)</label>
+                    <select class="form-control" @bind="_preset" disabled="@(_power == "TurnOff")">
+                        <option value="">— leave —</option>
+                        @foreach (var p in Enum.GetValues<Preset>())
+                        {
+                            <option value="@p">@p</option>
+                        }
+                    </select>
+                </div>
             </div>
 
             <button class="btn btn-success mt-3" @onclick="Add">Add schedule</button>
@@ -121,6 +131,7 @@
     private string _mode = "";
     private double? _tempInput;   // in the displayed unit
     private string _fan = "";
+    private string _preset = "";
 
     protected override void OnInitialized()
     {
@@ -146,6 +157,7 @@
             TargetTemperatureC = _tempInput is null ? null
                 : (Prefs.Unit == TemperatureUnit.Fahrenheit ? Math.Round(AppPreferences.FtoC(_tempInput.Value), 1) : _tempInput.Value),
             Fan = string.IsNullOrEmpty(_fan) ? null : int.Parse(_fan),
+            Preset = string.IsNullOrEmpty(_preset) ? null : Enum.Parse<Preset>(_preset),
         };
         Store.Save(entry);
 
@@ -154,6 +166,7 @@
         _mode = "";
         _tempInput = null;
         _fan = "";
+        _preset = "";
         for (var i = 0; i < 7; i++) _days[i] = false;
     }
 

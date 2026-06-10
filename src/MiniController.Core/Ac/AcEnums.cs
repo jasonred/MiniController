@@ -18,15 +18,34 @@ public enum OperationalMode
 }
 
 /// <summary>
-/// Fan speed values. The unit accepts 0–100 plus 102 = Auto; these are the
-/// named steps msmart exposes. Low/Medium/High map to the LED bars.
+/// Fan speeds matching what the ESPHome dongle exposes: AUTO / LOW / MEDIUM / HIGH
+/// plus the custom "silent" and "turbo" modes. Numeric values double as the Midea
+/// fan-speed byte for the legacy LAN path (Auto = 102, Turbo = full 100).
 /// </summary>
 public enum FanSpeed
 {
-    Auto = 102,
-    Full = 100,
-    High = 80,
-    Medium = 60,
-    Low = 40,
     Silent = 20,
+    Low = 40,
+    Medium = 60,
+    High = 80,
+    Turbo = 100,
+    Auto = 102,
+}
+
+/// <summary>Climate presets (comfort/energy profiles): the ESPHome NONE/BOOST/ECO/SLEEP set.</summary>
+public enum Preset
+{
+    None,
+    Boost,
+    Eco,
+    Sleep,
+}
+
+/// <summary>Louver swing modes the unit exposes.</summary>
+public enum SwingMode
+{
+    Off,
+    Both,
+    Vertical,
+    Horizontal,
 }
