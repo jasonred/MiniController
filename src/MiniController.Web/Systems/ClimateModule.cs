@@ -28,8 +28,11 @@ public sealed class ClimateModule : ISystemModule
 
     public event Action? Changed;
 
-    public Task PollAsync(CancellationToken ct) =>
-        _manager.IsConfigured ? _manager.RefreshAsync(ct) : Task.CompletedTask;
+    public async Task PollAsync(CancellationToken ct)
+    {
+        if (_manager.IsConfigured)
+            await _manager.RefreshAsync(ct);
+    }
 
     public SystemTileState GetTile()
     {

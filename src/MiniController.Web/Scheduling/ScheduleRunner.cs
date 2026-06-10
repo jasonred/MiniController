@@ -53,7 +53,14 @@ public sealed class ScheduleRunner(
 
             _lastFired[entry.Id] = stamp;
             logger.LogInformation("Firing schedule {Id} ({Action}) at {Time}.", entry.Id, entry.ActionSummary(prefs.Unit), entry.Time);
-            await ApplyAsync(entry, ct).ConfigureAwait(false);
+            try
+            {
+                await ApplyAsync(entry, ct).ConfigureAwait(false);
+            }
+            catch (Exception e) when (e is not OperationCanceledException)
+            {
+                logger.LogWarning(e, "Schedule {Id} failed to apply.", entry.Id);
+            }
         }
     }
 

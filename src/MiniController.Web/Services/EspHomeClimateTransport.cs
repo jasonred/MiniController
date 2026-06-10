@@ -64,55 +64,32 @@ public sealed class EspHomeClimateTransport : IClimateTransport
         finally { _gate.Release(); }
     }
 
-    /// <summary>Read the initial state burst from /events and build an AcStatus.</summary>
+    /// <summary>Read current state via one-shot REST GETs (no per-call event stream).</summary>
     private async Task<AcStatus> ReadStateAsync(CancellationToken ct)
     {
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        cts.CancelAfter(TimeSpan.FromSeconds(4));
+        using var climateResp = await _http.GetAsync($"/climate/{_climateId}", ct).ConfigureAwait(false);
+        climateResp.EnsureSuccessStatusCode();
+        using var climateDoc = JsonDocument.Parse(
+            await climateResp.Content.ReadAsStringAsync(ct).ConfigureAwait(false));
 
-        JsonElement? climate = null;
+        // Outdoor temperature is a separate sensor entity and is optional.
         double? outdoor = null;
-
         try
         {
-            using var stream = await _http.GetStreamAsync("/events", cts.Token).ConfigureAwait(false);
-            using var reader = new StreamReader(stream);
-
-            string? line;
-            while ((line = await reader.ReadLineAsync(cts.Token).ConfigureAwait(false)) is not null)
+            using var sensorResp = await _http.GetAsync($"/sensor/{_outdoorSensorId}", ct).ConfigureAwait(false);
+            if (sensorResp.IsSuccessStatusCode)
             {
-                if (!line.StartsWith("data:", StringComparison.Ordinal))
-                    continue;
-
-                var json = line[5..].Trim();
-                if (json.Length == 0 || json[0] != '{')
-                    continue;
-
-                JsonElement el;
-                try { el = JsonDocument.Parse(json).RootElement; }
-                catch { continue; }
-
-                if (!el.TryGetProperty("id", out var idEl)) continue;
-                var id = idEl.GetString();
-
-                if (id == $"climate-{_climateId}")
-                    climate = el.Clone();
-                else if (id == $"sensor-{_outdoorSensorId}")
-                    outdoor = ReadDouble(el, "value");
-
-                if (climate is not null && outdoor is not null)
-                    break;
+                using var sensorDoc = JsonDocument.Parse(
+                    await sensorResp.Content.ReadAsStringAsync(ct).ConfigureAwait(false));
+                outdoor = ReadDouble(sensorDoc.RootElement, "value");
             }
         }
-        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        catch
         {
-            // 4s window elapsed — use whatever we captured.
+            // outdoor sensor is best-effort
         }
 
-        if (climate is null)
-            throw new InvalidOperationException("No climate state received from ESPHome device.");
-
-        return BuildStatus(climate.Value, outdoor);
+        return BuildStatus(climateDoc.RootElement, outdoor);
     }
 
     private AcStatus BuildStatus(JsonElement c, double? outdoor)

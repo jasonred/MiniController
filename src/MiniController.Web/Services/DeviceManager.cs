@@ -90,37 +90,43 @@ public sealed class DeviceManager
 
     // ---- operations ----
 
-    public Task RefreshAsync(CancellationToken ct = default) =>
+    /// <summary>All operations return true on success, false if the command/read failed.</summary>
+    public Task<bool> RefreshAsync(CancellationToken ct = default) =>
         RunAsync(t => t.RefreshAsync(ct), "Refresh");
 
-    public Task SetPowerAsync(bool on) => RunAsync(t => t.SetPowerAsync(on), "Power");
+    public Task<bool> SetPowerAsync(bool on) => RunAsync(t => t.SetPowerAsync(on), "Power");
 
-    public Task SetTemperatureAsync(double celsius) =>
+    public Task<bool> SetTemperatureAsync(double celsius) =>
         RunAsync(t => t.SetTemperatureAsync(celsius), "Temperature");
 
-    public Task SetModeAsync(OperationalMode mode) => RunAsync(t => t.SetModeAsync(mode), "Mode");
+    public Task<bool> SetModeAsync(OperationalMode mode) => RunAsync(t => t.SetModeAsync(mode), "Mode");
 
-    public Task SetFanAsync(int fanSpeed) => RunAsync(t => t.SetFanAsync(fanSpeed), "Fan");
+    public Task<bool> SetFanAsync(int fanSpeed) => RunAsync(t => t.SetFanAsync(fanSpeed), "Fan");
 
-    private async Task RunAsync(Func<IClimateTransport, Task<AcStatus>> action, string label)
+    private async Task<bool> RunAsync(Func<IClimateTransport, Task<AcStatus>> action, string label)
     {
-        var transport = _transport;
+        IClimateTransport? transport;
+        lock (_sync) transport = _transport;
         if (transport is null)
-            return;
+            return false;
 
+        bool ok;
         try
         {
             Status = await action(transport).ConfigureAwait(false);
             LastError = null;
             LastUpdatedUtc = DateTime.UtcNow;
+            ok = true;
         }
         catch (Exception e)
         {
             LastError = e.GetBaseException().Message;
             _logger.LogWarning(e, "{Label} failed.", label);
+            ok = false;
         }
 
         NotifyChanged();
+        return ok;
     }
 
     // ---- setup helpers ----

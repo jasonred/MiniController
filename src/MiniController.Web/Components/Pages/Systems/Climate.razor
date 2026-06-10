@@ -157,27 +157,28 @@
         InvokeAsync(StateHasChanged);
     }
 
-    // Power / mode / fan: set optimistic state, fire the command in the background (no lock).
-    private void Power(bool on)
+    // Power / mode / fan: show the change instantly (optimistic), send in the background,
+    // and revert the optimistic override if the command fails.
+    private async Task Power(bool on)
     {
         _optPower = on;
-        _ = Manager.SetPowerAsync(on);
+        if (!await Manager.SetPowerAsync(on)) _optPower = null;
     }
 
-    private void SetMode(OperationalMode mode)
+    private async Task SetMode(OperationalMode mode)
     {
         _optMode = mode;
         _optPower = true;
-        _ = Manager.SetModeAsync(mode);
+        if (!await Manager.SetModeAsync(mode)) { _optMode = null; _optPower = null; }
     }
 
-    private void SetFan(int fan)
+    private async Task SetFan(int fan)
     {
         _optFan = fan;
-        _ = Manager.SetFanAsync(fan);
+        if (!await Manager.SetFanAsync(fan)) _optFan = null;
     }
 
-    private void Refresh() => _ = Manager.RefreshAsync();
+    private Task Refresh() => Manager.RefreshAsync();
 
     // Temperature: step by the preferred unit (1°F or 0.5°C), update instantly, debounce the send.
     private void Nudge(int direction)
