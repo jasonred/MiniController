@@ -1,0 +1,168 @@
+@page "/system/climate/schedule"
+@implements IDisposable
+@inject ScheduleStore Store
+@inject AppPreferences Prefs
+
+<PageTitle>Climate Schedule</PageTitle>
+
+<div class="container py-3">
+    <div class="card mb-3">
+        <div class="card-body">
+            <h5 class="card-title">Scheduled actions</h5>
+            @if (Store.Entries.Count == 0)
+            {
+                <p class="text-muted mb-0">No schedules yet. Add one below.</p>
+            }
+            else
+            {
+                <table class="table table-sm align-middle mt-2">
+                    <thead><tr><th>On</th><th>Time</th><th>Days</th><th>Action</th><th></th></tr></thead>
+                    <tbody>
+                        @foreach (var e in Store.Entries.OrderBy(x => x.Time))
+                        {
+                            <tr>
+                                <td>
+                                    <input type="checkbox" checked="@e.Enabled"
+                                           @onchange="ev => Store.SetEnabled(e.Id, (bool)ev.Value!)" />
+                                </td>
+                                <td>@Display12h(e.Time)</td>
+                                <td>@e.DaysSummary()</td>
+                                <td>@(string.IsNullOrWhiteSpace(e.Label) ? "" : e.Label + " — ")@e.ActionSummary(Prefs.Unit)</td>
+                                <td><button class="btn btn-sm btn-danger" @onclick="() => Store.Delete(e.Id)">Delete</button></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <h5 class="card-title">Add a schedule</h5>
+            <div class="row g-2">
+                <div class="col-md-4">
+                    <label class="form-label small">Label (optional)</label>
+                    <input class="form-control" @bind="_label" placeholder="Morning warm-up" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small">Time</label>
+                    <input class="form-control" type="time" value="@_time"
+                           @onchange="e => _time = e.Value?.ToString() is { Length: > 0 } v ? v : _time" />
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label small">Days (none = every day)</label>
+                    <div class="d-flex flex-wrap gap-2">
+                        @for (var i = 0; i < 7; i++)
+                        {
+                            var idx = i;
+                            <label class="lcars-day">
+                                <input type="checkbox" @bind="_days[idx]" />
+                                @(((DayOfWeek)idx).ToString()[..3])
+                            </label>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <div class="row g-2 mt-1">
+                <div class="col-md-3">
+                    <label class="form-label small">Power</label>
+                    <select class="form-control" @bind="_power">
+                        <option value="TurnOn">Turn on</option>
+                        <option value="TurnOff">Turn off</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small">Mode (optional)</label>
+                    <select class="form-control" @bind="_mode" disabled="@(_power == "TurnOff")">
+                        <option value="">— leave —</option>
+                        @foreach (var m in Enum.GetValues<OperationalMode>())
+                        {
+                            <option value="@m">@m</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small">Target @Prefs.Symbol (optional)</label>
+                    <input class="form-control" type="number"
+                           step="@(Prefs.Unit == TemperatureUnit.Fahrenheit ? "1" : "0.5")"
+                           min="@(Prefs.Unit == TemperatureUnit.Fahrenheit ? "61" : "16")"
+                           max="@(Prefs.Unit == TemperatureUnit.Fahrenheit ? "86" : "30")"
+                           @bind="_tempInput" disabled="@(_power == "TurnOff")" />
+                    @if (_tempInput is { } t)
+                    {
+                        <span class="text-muted small">@OtherUnit(t)</span>
+                    }
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small">Fan (optional)</label>
+                    <select class="form-control" @bind="_fan" disabled="@(_power == "TurnOff")">
+                        <option value="">— leave —</option>
+                        @foreach (var f in Enum.GetValues<FanSpeed>())
+                        {
+                            <option value="@((int)f)">@f</option>
+                        }
+                    </select>
+                </div>
+            </div>
+
+            <button class="btn btn-success mt-3" @onclick="Add">Add schedule</button>
+            <a class="btn btn-outline-secondary mt-3" href="/system/climate">Back to control</a>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string _label = "";
+    private string _time = "07:00";   // raw "HH:mm" straight from the time input
+    private readonly bool[] _days = new bool[7];
+    private string _power = "TurnOn";
+    private string _mode = "";
+    private double? _tempInput;   // in the displayed unit
+    private string _fan = "";
+
+    protected override void OnInitialized()
+    {
+        Store.Changed += OnChanged;
+        Prefs.Changed += OnChanged;
+    }
+
+    private void OnChanged() => InvokeAsync(StateHasChanged);
+
+    private string OtherUnit(double v) => Prefs.Unit == TemperatureUnit.Fahrenheit
+        ? $"{AppPreferences.FtoC(v):0.#}°C"
+        : $"{AppPreferences.CtoF(v):0}°F";
+
+    private void Add()
+    {
+        var entry = new ScheduleEntry
+        {
+            Label = string.IsNullOrWhiteSpace(_label) ? null : _label.Trim(),
+            Time = _time,
+            Days = Enumerable.Range(0, 7).Where(i => _days[i]).Select(i => (DayOfWeek)i).ToList(),
+            Power = _power == "TurnOff" ? SchedulePower.TurnOff : SchedulePower.TurnOn,
+            Mode = string.IsNullOrEmpty(_mode) ? null : Enum.Parse<OperationalMode>(_mode),
+            TargetTemperatureC = _tempInput is null ? null
+                : (Prefs.Unit == TemperatureUnit.Fahrenheit ? Math.Round(AppPreferences.FtoC(_tempInput.Value), 1) : _tempInput.Value),
+            Fan = string.IsNullOrEmpty(_fan) ? null : int.Parse(_fan),
+        };
+        Store.Save(entry);
+
+        // Reset the form for the next entry.
+        _label = "";
+        _mode = "";
+        _tempInput = null;
+        _fan = "";
+        for (var i = 0; i < 7; i++) _days[i] = false;
+    }
+
+    private static string Display12h(string hhmm) =>
+        TimeOnly.TryParse(hhmm, out var t) ? t.ToString("h:mm tt") : hhmm;
+
+    public void Dispose()
+    {
+        Store.Changed -= OnChanged;
+        Prefs.Changed -= OnChanged;
+    }
+}

@@ -1,0 +1,227 @@
+@page "/system/climate"
+@implements IDisposable
+@inject DeviceManager Manager
+@inject AppPreferences Prefs
+
+<PageTitle>Climate</PageTitle>
+
+<div class="container py-3">
+    @if (!Manager.IsConfigured)
+    {
+        <div class="alert alert-warning">
+            No device configured yet. Open <a href="/system/climate/setup">Setup</a> to point the app at your
+            unit.
+        </div>
+    }
+    else
+    {
+        var s = Manager.Status;
+
+        <div class="card mb-3">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">
+                        @(string.IsNullOrWhiteSpace(Manager.Settings.Name) ? "Climate" : Manager.Settings.Name)
+                    </h5>
+                    <span class="badge @(EffPower ? "bg-success" : "bg-secondary")">
+                        @(EffPower ? "ON" : "OFF")
+                    </span>
+                </div>
+
+                @if (s is null)
+                {
+                    <p class="text-muted mt-2 mb-0">Waiting for first status read…</p>
+                }
+                else
+                {
+                    <div class="row mt-3 text-center">
+                        <div class="col">
+                            <div class="text-muted small">Target</div>
+                            <div class="fs-4">@FormatTemp(_setpoint)</div>
+                        </div>
+                        <div class="col">
+                            <div class="text-muted small">Indoor</div>
+                            <div class="fs-4">@FormatTempNullable(s.IndoorTemperature)</div>
+                        </div>
+                        <div class="col">
+                            <div class="text-muted small">Outdoor</div>
+                            <div class="fs-4">@FormatTempNullable(s.OutdoorTemperature)</div>
+                        </div>
+                        <div class="col">
+                            <div class="text-muted small">Mode</div>
+                            <div class="fs-5 mt-1">@(EffMode?.ToString() ?? "—")</div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <div class="d-flex gap-2 mb-3">
+            <button class="btn @(EffPower ? "btn-outline-secondary" : "btn-success")"
+                    @onclick="() => Power(true)">Power On</button>
+            <button class="btn @(EffPower ? "btn-danger" : "btn-outline-secondary")"
+                    @onclick="() => Power(false)">Power Off</button>
+            <a class="btn btn-outline-primary ms-auto" href="/system/climate/schedule">Schedule</a>
+            <button class="btn btn-outline-primary" @onclick="Refresh">Refresh</button>
+        </div>
+
+        <div class="card mb-3">
+            <div class="card-body">
+                <h6 class="card-subtitle mb-2 text-muted">Target temperature</h6>
+                <div class="d-flex align-items-center gap-3">
+                    <button class="btn btn-lg btn-outline-primary" @onclick="() => Nudge(-1)">−</button>
+                    <span class="fs-3">@Prefs.Format(_setpoint)</span>
+                    <button class="btn btn-lg btn-outline-primary" @onclick="() => Nudge(1)">+</button>
+                    @if (_setpointPending)
+                    {
+                        <span class="text-muted ms-2">sending…</span>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="card mb-3">
+            <div class="card-body">
+                <h6 class="card-subtitle mb-2 text-muted">Mode</h6>
+                <div class="btn-group flex-wrap" role="group">
+                    @foreach (var mode in Enum.GetValues<OperationalMode>())
+                    {
+                        <button class="btn @(EffMode == mode ? "btn-primary" : "btn-outline-primary")"
+                                @onclick="() => SetMode(mode)">@mode</button>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="card mb-3">
+            <div class="card-body">
+                <h6 class="card-subtitle mb-2 text-muted">Fan</h6>
+                <div class="btn-group flex-wrap" role="group">
+                    @foreach (var fan in Enum.GetValues<FanSpeed>())
+                    {
+                        <button class="btn @(EffFan == (int)fan ? "btn-primary" : "btn-outline-primary")"
+                                @onclick="() => SetFan((int)fan)">@fan</button>
+                    }
+                </div>
+            </div>
+        </div>
+
+        @if (!string.IsNullOrEmpty(Manager.LastError))
+        {
+            <div class="alert alert-danger">@Manager.LastError</div>
+        }
+
+        <p class="text-muted small">
+            Last update: @(Manager.LastUpdatedUtc?.ToLocalTime().ToString("g") ?? "never")
+            · <a href="/system/climate/setup">Setup</a>
+        </p>
+    }
+</div>
+
+@code {
+    private double _setpoint = 22.0;
+    private bool _setpointPending;
+    private CancellationTokenSource? _tempDebounce;
+
+    // Optimistic overrides so the UI reflects a tap instantly, before the device confirms.
+    private bool? _optPower;
+    private OperationalMode? _optMode;
+    private int? _optFan;
+
+    private bool EffPower => _optPower ?? Manager.Status?.PowerOn ?? false;
+    private OperationalMode? EffMode => _optMode ?? Manager.Status?.Mode;
+    private int? EffFan => _optFan ?? Manager.Status?.FanSpeed;
+
+    protected override void OnInitialized()
+    {
+        Manager.Changed += OnChanged;
+        Prefs.Changed += OnChanged;
+        if (Manager.Status is not null)
+            _setpoint = Manager.Status.TargetTemperature;
+    }
+
+    private void OnChanged()
+    {
+        var s = Manager.Status;
+        if (s is not null)
+        {
+            // Clear an optimistic override once the device confirms it.
+            if (_optPower == s.PowerOn) _optPower = null;
+            if (_optMode == s.Mode) _optMode = null;
+            if (_optFan == s.FanSpeed) _optFan = null;
+
+            // Don't stomp the user's in-progress setpoint edit.
+            if (!_setpointPending)
+                _setpoint = s.TargetTemperature;
+        }
+        InvokeAsync(StateHasChanged);
+    }
+
+    // Power / mode / fan: show the change instantly (optimistic), send in the background,
+    // and revert the optimistic override if the command fails.
+    private async Task Power(bool on)
+    {
+        _optPower = on;
+        if (!await Manager.SetPowerAsync(on)) _optPower = null;
+    }
+
+    private async Task SetMode(OperationalMode mode)
+    {
+        _optMode = mode;
+        _optPower = true;
+        if (!await Manager.SetModeAsync(mode)) { _optMode = null; _optPower = null; }
+    }
+
+    private async Task SetFan(int fan)
+    {
+        _optFan = fan;
+        if (!await Manager.SetFanAsync(fan)) _optFan = null;
+    }
+
+    private Task Refresh() => Manager.RefreshAsync();
+
+    // Temperature: step by the preferred unit (1°F or 0.5°C), update instantly, debounce the send.
+    private void Nudge(int direction)
+    {
+        if (Prefs.Unit == TemperatureUnit.Fahrenheit)
+        {
+            var f = Math.Round(AppPreferences.CtoF(_setpoint)) + direction;
+            _setpoint = Math.Clamp(AppPreferences.FtoC(f), 16, 30);
+        }
+        else
+        {
+            _setpoint = Math.Clamp(_setpoint + 0.5 * direction, 16, 30);
+        }
+        _setpointPending = true;
+
+        _tempDebounce?.Cancel();
+        _tempDebounce = new CancellationTokenSource();
+        _ = SendAfterIdle(_tempDebounce.Token);
+    }
+
+    private async Task SendAfterIdle(CancellationToken token)
+    {
+        try { await Task.Delay(700, token); }
+        catch (TaskCanceledException) { return; } // superseded by a newer tap
+
+        await Manager.SetTemperatureAsync(_setpoint);
+
+        // Only clear "sending" if no newer tap started a fresh cycle.
+        if (!token.IsCancellationRequested)
+        {
+            _setpointPending = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private string FormatTemp(double c) => Prefs.Format(c);
+    private string FormatTempNullable(double? c) => Prefs.FormatOrDash(c);
+
+    public void Dispose()
+    {
+        Manager.Changed -= OnChanged;
+        Prefs.Changed -= OnChanged;
+        _tempDebounce?.Cancel();
+        _tempDebounce?.Dispose();
+    }
+}

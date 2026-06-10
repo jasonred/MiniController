@@ -1,0 +1,47 @@
+@page "/"
+@implements IDisposable
+@inject ISystemRegistry Registry
+
+<PageTitle>Systems</PageTitle>
+
+<div class="container py-3">
+    @if (Registry.Modules.Count == 0)
+    {
+        <div class="alert alert-warning">No systems registered.</div>
+    }
+    else
+    {
+        <div class="lcars-tiles">
+            @foreach (var module in Registry.Modules)
+            {
+                var tile = module.GetTile();
+                <a class="lcars-tile @(tile.Active ? "lcars-tile--active" : "")"
+                   href="@module.Route" style="--tile-accent: @module.Accent;">
+                    <div class="lcars-tile__name">@module.Name</div>
+                    <div class="lcars-tile__headline">@tile.Headline</div>
+                    <div class="lcars-tile__detail">@tile.Detail</div>
+                    <div class="lcars-tile__status">
+                        <span class="lcars-dot @(tile.Online ? "lcars-dot--on" : "lcars-dot--off")"></span>
+                        @(tile.Online ? "Online" : "Offline")
+                    </div>
+                </a>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    protected override void OnInitialized()
+    {
+        foreach (var module in Registry.Modules)
+            module.Changed += OnChanged;
+    }
+
+    private async void OnChanged() => await InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        foreach (var module in Registry.Modules)
+            module.Changed -= OnChanged;
+    }
+}
