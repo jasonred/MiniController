@@ -1,0 +1,514 @@
+/* LCARS theme — Star Trek: TNG computer aesthetic.
+   Loaded after bootstrap so it overrides the default chrome. Cosmetic only. */
+
+@import url("https://fonts.googleapis.com/css2?family=Antonio:wght@400;500;600;700&display=swap");
+
+:root {
+  --lcars-bg: #000;
+  --lcars-orange: #ff9900;
+  --lcars-tan: #ffcc66;
+  --lcars-peach: #ffcc99;
+  --lcars-lilac: #cc99cc;
+  --lcars-violet: #9966cc;
+  --lcars-blue: #6699ff;
+  --lcars-ice: #99ccff;
+  --lcars-red: #cc6666;
+  --lcars-green: #99cc99;
+  --lcars-grey: #5b6a8a;
+  --lcars-panel: #0a0a0a;
+  --lcars-font: "Antonio", "Arial Narrow", "Helvetica Neue", sans-serif;
+}
+
+html,
+body {
+  background: var(--lcars-bg);
+  color: var(--lcars-orange);
+  font-family: var(--lcars-font);
+  letter-spacing: 0.5px;
+}
+
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+::-webkit-scrollbar-track {
+  background: #000;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--lcars-violet);
+  border-radius: 6px;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--lcars-tan);
+  font-weight: 600;
+}
+
+a {
+  color: var(--lcars-ice);
+  text-decoration: none;
+}
+a:hover {
+  color: var(--lcars-orange);
+  text-decoration: underline;
+}
+
+/* ---------- Frame: elbow + rail ---------- */
+
+.lcars {
+  min-height: 100vh;
+  padding: 12px;
+  background: #000;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Body fills the remaining height so the rail and content reach the bottom. */
+.lcars-body {
+  flex: 1;
+}
+
+/* Pages fill the available width on a wall panel — drop Bootstrap's narrow container cap. */
+.lcars-content .container {
+  max-width: 100% !important;
+}
+
+.lcars-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  height: 96px;
+}
+
+/* Elbow: an L — convex outer top-left, concave inner corner.
+   Vertical leg (150px) matches the rail width; horizontal leg (44px)
+   matches the bar height. The ::after carves the inner negative space. */
+.lcars-top__elbow {
+  position: relative;
+  width: 230px;
+  height: 96px;
+  background: var(--lcars-orange);
+  border-top-left-radius: 64px;
+  flex: 0 0 auto;
+}
+.lcars-top__elbow::after {
+  content: "";
+  position: absolute;
+  left: 150px;
+  top: 44px;
+  right: 0;
+  bottom: 0;
+  background: #000;
+  border-top-left-radius: 26px;
+}
+
+.lcars-top__bar {
+  flex: 1;
+  height: 44px;
+  background: var(--lcars-lilac);
+  border-top-right-radius: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 22px;
+}
+
+.lcars-top__title {
+  color: #000;
+  font-weight: 700;
+  font-size: 1.35rem;
+  text-transform: uppercase;
+  letter-spacing: 3px;
+}
+
+.lcars-body {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.lcars-rail {
+  width: 150px;
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lcars-content {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 6px 40px 14px;
+}
+
+/* Rail navigation buttons */
+.lcars-railbtn {
+  display: block;
+  background: var(--lcars-blue);
+  color: #000;
+  text-align: right;
+  padding: 14px 16px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  border: none;
+  border-radius: 0;
+  line-height: 1;
+}
+.lcars-railbtn:hover {
+  background: var(--lcars-orange);
+  color: #000;
+  text-decoration: none;
+}
+.lcars-railbtn.active {
+  background: var(--lcars-orange);
+  color: #000;
+}
+.lcars-rail .lcars-railbtn:first-child {
+  border-top-right-radius: 4px;
+}
+
+.lcars-railbtn--static {
+  background: var(--lcars-violet);
+  color: #000;
+  opacity: 0.85;
+  cursor: default;
+}
+
+.lcars-rail__fill {
+  flex: 1;
+  min-height: 30px;
+  background: var(--lcars-grey);
+}
+
+.lcars-rail__cap {
+  height: 60px;
+  background: var(--lcars-tan);
+  border-bottom-left-radius: 40px;
+}
+
+.lcars-rail__num {
+  background: #000;
+  color: var(--lcars-peach);
+  text-align: right;
+  padding: 4px 16px;
+  font-size: 0.8rem;
+  letter-spacing: 2px;
+}
+
+/* ---------- Panels (Bootstrap .card) ---------- */
+
+.card {
+  background: var(--lcars-panel) !important;
+  border: none !important;
+  border-left: 16px solid var(--lcars-tan);
+  border-radius: 0 28px 28px 0 !important;
+  margin-bottom: 14px !important;
+  overflow: hidden;
+}
+.card:nth-of-type(2n) {
+  border-left-color: var(--lcars-lilac);
+}
+.card:nth-of-type(3n) {
+  border-left-color: var(--lcars-blue);
+}
+
+.card-body {
+  color: var(--lcars-peach);
+}
+.card-title {
+  color: var(--lcars-orange) !important;
+}
+.card-subtitle,
+.text-muted {
+  color: var(--lcars-violet) !important;
+}
+
+/* ---------- Buttons ---------- */
+
+.btn {
+  text-transform: uppercase;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  border: none !important;
+  border-radius: 4px 18px 18px 4px;
+  color: #000 !important;
+  padding: 8px 18px;
+  min-width: 64px;
+}
+.btn:hover {
+  filter: brightness(1.15);
+  color: #000 !important;
+}
+.btn:disabled,
+.btn.disabled {
+  opacity: 0.35;
+}
+.btn:focus,
+.btn:active:focus {
+  box-shadow:
+    0 0 0 0.18rem #000,
+    0 0 0 0.32rem var(--lcars-orange) !important;
+}
+
+.btn-primary {
+  background: var(--lcars-orange) !important;
+}
+.btn-outline-primary {
+  background: var(--lcars-blue) !important;
+}
+.btn-success {
+  background: var(--lcars-green) !important;
+}
+.btn-danger {
+  background: var(--lcars-red) !important;
+}
+.btn-secondary,
+.btn-outline-secondary {
+  background: var(--lcars-grey) !important;
+}
+
+/* Button groups (mode / fan selectors) get individual pill spacing */
+.btn-group {
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.btn-group > .btn {
+  border-radius: 4px 18px 18px 4px !important;
+}
+
+/* ---------- Forms ----------
+   LCARS had no boxed text inputs — data-entry fields were flat dark readout
+   strips with a bright colored underline and amber value text. No box, no
+   rounded corner, no focus ring. The label sits above as a small caption. */
+
+.form-control,
+.form-control:focus {
+  background: #160f02 !important;
+  border: none !important;
+  border-bottom: 3px solid var(--lcars-tan) !important;
+  border-radius: 0 !important;
+  color: var(--lcars-orange) !important;
+  padding: 6px 4px;
+  font-family: var(--lcars-font);
+  letter-spacing: 1px;
+}
+.form-control:focus {
+  background: #241803 !important;
+  border-bottom-color: var(--lcars-peach) !important;
+  box-shadow: none !important;
+}
+.form-control::placeholder {
+  color: #8a6a30 !important;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.form-label {
+  color: var(--lcars-tan);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-size: 0.78rem;
+}
+code {
+  color: var(--lcars-ice);
+}
+
+/* ---------- Tables ---------- */
+
+.table {
+  color: var(--lcars-peach);
+}
+.table > :not(caption) > * > * {
+  background: #000 !important;
+  color: var(--lcars-peach) !important;
+  border-color: #222 !important;
+}
+.table thead th {
+  color: var(--lcars-orange) !important;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* ---------- Badges / alerts ---------- */
+
+.badge {
+  border-radius: 4px 12px 12px 4px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.badge.bg-success {
+  background: var(--lcars-green) !important;
+  color: #000 !important;
+}
+.badge.bg-secondary {
+  background: var(--lcars-grey) !important;
+  color: #000 !important;
+}
+
+.alert {
+  border: none;
+  border-radius: 0 16px 16px 0;
+  color: #000;
+  font-weight: 600;
+}
+.alert-danger {
+  background: var(--lcars-red);
+  border-left: 14px solid #aa3333;
+}
+.alert-warning {
+  background: var(--lcars-tan);
+  border-left: 14px solid var(--lcars-orange);
+}
+.alert a {
+  color: #1a1a4d;
+  text-decoration: underline;
+}
+
+/* Big readouts on the control page */
+.fs-3,
+.fs-4,
+.fs-5 {
+  color: var(--lcars-orange);
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+
+/* ---------- Error UI ---------- */
+#blazor-error-ui {
+  background: var(--lcars-red);
+  color: #000;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  padding: 0.7rem 1.25rem;
+  position: fixed;
+  display: none;
+  z-index: 1000;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+#blazor-error-ui .dismiss {
+  cursor: pointer;
+  position: absolute;
+  right: 0.75rem;
+  top: 0.5rem;
+}
+
+/* ---------- Dashboard system tiles ---------- */
+
+.lcars-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.lcars-tile {
+  display: block;
+  background: var(--lcars-panel);
+  border: none;
+  border-left: 16px solid var(--tile-accent, var(--lcars-tan));
+  border-radius: 0 28px 28px 0;
+  padding: 16px 20px;
+  color: var(--lcars-peach);
+  text-decoration: none;
+  min-height: 150px;
+}
+.lcars-tile:hover {
+  filter: brightness(1.12);
+  text-decoration: none;
+  color: var(--lcars-peach);
+}
+.lcars-tile--active {
+  box-shadow: inset 0 0 0 2px var(--tile-accent, var(--lcars-orange));
+}
+.lcars-tile__name {
+  color: var(--tile-accent, var(--lcars-tan));
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  font-weight: 700;
+}
+.lcars-tile__headline {
+  font-size: 2.4rem;
+  color: var(--lcars-orange);
+  font-weight: 700;
+  line-height: 1.05;
+  margin-top: 8px;
+}
+.lcars-tile__detail {
+  color: var(--lcars-violet);
+  margin-top: 4px;
+}
+.lcars-tile__status {
+  margin-top: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-size: 0.8rem;
+}
+.lcars-dot {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  margin-right: 7px;
+}
+.lcars-dot--on {
+  background: var(--lcars-green);
+}
+.lcars-dot--off {
+  background: var(--lcars-red);
+}
+
+/* Schedule day toggles */
+.lcars-day {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--lcars-peach);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-size: 0.85rem;
+}
+
+/* ---------- Touch targets ----------
+   Sized for finger input on a touchscreen panel (no hardware assumed). */
+
+.btn {
+  min-height: 48px;
+}
+.btn-lg {
+  min-height: 64px;
+  min-width: 64px;
+  font-size: 1.5rem;
+}
+.form-control {
+  min-height: 48px;
+  font-size: 1rem;
+}
+.lcars-railbtn {
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+/* Press feedback, and don't rely on hover on touch devices */
+.btn:active,
+.lcars-railbtn:active,
+.lcars-tile:active {
+  filter: brightness(1.3);
+}
+
+@media (hover: none) {
+  .btn:hover,
+  .lcars-railbtn:hover,
+  .lcars-tile:hover {
+    filter: none;
+  }
+}

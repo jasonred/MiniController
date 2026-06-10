@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/MiniController.Core/MiniController.Core.csproj" />
+    <Project Path="src/MiniController.Web/MiniController.Web.csproj" />
+  </Folder>
+</Solution>

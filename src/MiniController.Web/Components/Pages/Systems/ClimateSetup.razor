@@ -1,0 +1,252 @@
+@page "/system/climate/setup"
+@inject DeviceManager Manager
+@inject AppPreferences Prefs
+
+<PageTitle>Climate Setup</PageTitle>
+
+<div class="container py-3">
+    <div class="card mb-3">
+        <div class="card-body">
+            <h5 class="card-title">Display units</h5>
+            <p class="text-muted small">How temperatures are shown across the app.</p>
+            <div class="btn-group" role="group">
+                <button class="btn @(Prefs.Unit == TemperatureUnit.Fahrenheit ? "btn-primary" : "btn-outline-primary")"
+                        @onclick="() => SetUnit(TemperatureUnit.Fahrenheit)">°F</button>
+                <button class="btn @(Prefs.Unit == TemperatureUnit.Celsius ? "btn-primary" : "btn-outline-primary")"
+                        @onclick="() => SetUnit(TemperatureUnit.Celsius)">°C</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <h5 class="card-title">ESPHome dongle (recommended)</h5>
+            <p class="text-muted small">
+                For an SLWF-01Pro (or any ESPHome AC dongle): just enter its IP/hostname. No token/key needed.
+                This takes priority over the legacy fields below when set.
+            </p>
+            <div class="row g-2">
+                <div class="col-md-6">
+                    <label class="form-label small">ESPHome host / IP</label>
+                    <input class="form-control" placeholder="10.0.0.167" @bind="_form.EspHomeHost" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small">Name</label>
+                    <input class="form-control" @bind="_form.Name" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small">Poll seconds</label>
+                    <input class="form-control" type="number" @bind="_form.PollSeconds" />
+                </div>
+            </div>
+            <button class="btn btn-success mt-3" @onclick="Save" disabled="@_saving">Save &amp; connect</button>
+            <a class="btn btn-outline-secondary mt-3" href="/system/climate">Back to control</a>
+            @if (_saved)
+            {
+                <span class="text-success ms-2">Saved.</span>
+            }
+        </div>
+    </div>
+
+    <details class="mb-3">
+        <summary class="text-muted">Legacy: stock Midea cloud-dongle (token/key)</summary>
+
+    <div class="card mb-3 mt-2">
+        <div class="card-body">
+            <h5 class="card-title">1. Discover units on the LAN</h5>
+            <div class="row g-2 align-items-center">
+                <div class="col-md-6">
+                    <input class="form-control" placeholder="Unit IP (optional — for direct probe)"
+                           @bind="_targetIp" />
+                </div>
+                <div class="col-auto">
+                    <button class="btn btn-primary" @onclick="Discover" disabled="@_discovering">
+                        @(_discovering ? "Scanning…" : string.IsNullOrWhiteSpace(_targetIp) ? "Discover (broadcast)" : "Probe IP")
+                    </button>
+                </div>
+            </div>
+            <p class="text-muted small mt-2 mb-0">
+                Broadcast can be blocked between access points (e.g. desktop on 5GHz, unit on 2.4GHz with
+                AP isolation). If broadcast finds nothing, get the unit's IP from your router's client list
+                (look for a name like <code>net_ac_XXXX</code> or a Midea MAC) and probe it directly.
+            </p>
+
+            @if (!string.IsNullOrEmpty(_discoverError))
+            {
+                <div class="alert alert-danger mt-2 mb-0">@_discoverError</div>
+            }
+
+            @if (_devices.Count > 0)
+            {
+                <table class="table table-sm mt-3">
+                    <thead><tr><th>IP</th><th>Device ID</th><th>Type</th><th>Ver</th><th></th></tr></thead>
+                    <tbody>
+                        @foreach (var d in _devices)
+                        {
+                            <tr>
+                                <td>@d.Ip</td>
+                                <td>@d.DeviceId</td>
+                                <td>0x@(d.DeviceType.ToString("X2"))</td>
+                                <td>@d.Version</td>
+                                <td><button class="btn btn-sm btn-outline-primary" @onclick="() => Use(d)">Use</button></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+            else if (_discovered)
+            {
+                <p class="text-muted mt-2 mb-0">No devices found. Check you're on the same subnet, then retry.</p>
+            }
+        </div>
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <h5 class="card-title">2. Fetch token &amp; key (one time)</h5>
+            <p class="text-muted small">
+                Uses your <strong>NetHome Plus</strong> account (add the unit there first). Credentials are
+                used once to retrieve the token/key and are not stored.
+            </p>
+            <div class="row g-2">
+                <div class="col-md-6">
+                    <input class="form-control" placeholder="NetHome Plus email" @bind="_account" />
+                </div>
+                <div class="col-md-6">
+                    <input class="form-control" type="password" placeholder="Password" @bind="_password" />
+                </div>
+            </div>
+            <button class="btn btn-primary mt-2" @onclick="FetchTokenKey" disabled="@_fetching">
+                @(_fetching ? "Fetching…" : "Fetch token/key")
+            </button>
+            @if (!string.IsNullOrEmpty(_fetchError))
+            {
+                <div class="alert alert-danger mt-2 mb-0">@_fetchError</div>
+            }
+        </div>
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <h5 class="card-title">3. Connection details</h5>
+            <div class="row g-2">
+                <div class="col-md-8">
+                    <label class="form-label small">Name</label>
+                    <input class="form-control" @bind="_form.Name" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small">Poll seconds</label>
+                    <input class="form-control" type="number" @bind="_form.PollSeconds" />
+                </div>
+                <div class="col-md-8">
+                    <label class="form-label small">IP</label>
+                    <input class="form-control" @bind="_form.Ip" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small">Port</label>
+                    <input class="form-control" type="number" @bind="_form.Port" />
+                </div>
+                <div class="col-12">
+                    <label class="form-label small">Device ID</label>
+                    <input class="form-control" type="number" @bind="_form.DeviceId" />
+                </div>
+                <div class="col-12">
+                    <label class="form-label small">Token (hex)</label>
+                    <input class="form-control font-monospace" @bind="_form.Token" />
+                </div>
+                <div class="col-12">
+                    <label class="form-label small">Key (hex)</label>
+                    <input class="form-control font-monospace" @bind="_form.Key" />
+                </div>
+            </div>
+
+            <button class="btn btn-success mt-3" @onclick="Save" disabled="@_saving">Save &amp; connect</button>
+            <a class="btn btn-outline-secondary mt-3" href="/system/climate">Back to control</a>
+            @if (_saved)
+            {
+                <span class="text-success ms-2">Saved.</span>
+            }
+        </div>
+    </div>
+    </details>
+</div>
+
+@code {
+    private DeviceSettings _form = new();
+    private List<DiscoveredDevice> _devices = [];
+    private bool _discovering, _discovered, _fetching, _saving, _saved;
+    private string _account = "", _password = "", _fetchError = "", _targetIp = "", _discoverError = "";
+
+    protected override void OnInitialized()
+    {
+        // Seed the form from current settings (clone so edits aren't live until saved).
+        var s = Manager.Settings;
+        _form = new DeviceSettings
+        {
+            Ip = s.Ip, Port = s.Port, DeviceId = s.DeviceId,
+            Token = s.Token, Key = s.Key, Name = s.Name, PollSeconds = s.PollSeconds,
+        };
+    }
+
+    private async Task SetUnit(TemperatureUnit unit) => await Prefs.SetUnitAsync(unit);
+
+    private async Task Discover()
+    {
+        _discovering = true;
+        _saved = false;
+        _discoverError = "";
+        try
+        {
+            _devices = (await Manager.DiscoverAsync(_targetIp)).ToList();
+            _discovered = true;
+        }
+        catch (Exception e)
+        {
+            _discoverError = e.GetBaseException().Message;
+        }
+        finally { _discovering = false; }
+    }
+
+    private void Use(DiscoveredDevice d)
+    {
+        _form.Ip = d.Ip;
+        _form.Port = d.Port;
+        _form.DeviceId = d.DeviceId;
+        if (string.IsNullOrWhiteSpace(_form.Name))
+            _form.Name = d.Name;
+    }
+
+    private async Task FetchTokenKey()
+    {
+        _fetching = true;
+        _fetchError = "";
+        try
+        {
+            if (_form.DeviceId == 0)
+            {
+                _fetchError = "Set the Device ID first (discover, or enter it manually).";
+                return;
+            }
+
+            var (token, key) = await Manager.FetchTokenKeyAsync(_account, _password, _form.DeviceId);
+            _form.Token = token;
+            _form.Key = key;
+        }
+        catch (Exception e)
+        {
+            _fetchError = e.Message;
+        }
+        finally { _fetching = false; }
+    }
+
+    private async Task Save()
+    {
+        _saving = true;
+        try
+        {
+            await Manager.SaveSettingsAsync(_form);
+            _saved = true;
+        }
+        finally { _saving = false; }
+    }
+}

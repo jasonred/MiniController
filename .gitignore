@@ -1,0 +1,37 @@
+# ---- .NET build output ----
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+publish/
+artifacts/
+*.dll
+*.exe
+*.pdb
+
+# ---- IDE / editor ----
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.userprefs
+*~
+
+# ---- Runtime data (machine-specific / sensitive) ----
+# device.json holds the unit's host/IP and, on the legacy path, token+key.
+device.json
+schedules.json
+prefs.json
+
+# Dev server logs (written by the run helpers)
+server.log
+server.err.log
+
+# ---- Reference material (local only) ----
+# Python source the protocol was ported from; not part of the build.
+_ref/
+
+# ---- OS noise ----
+.DS_Store
+Thumbs.db

@@ -1,0 +1,11 @@
+@inject ISystemRegistry Registry
+
+<NavLink class="lcars-railbtn" href="" Match="NavLinkMatch.All">Systems</NavLink>
+
+@foreach (var module in Registry.Modules)
+{
+    <NavLink class="lcars-railbtn" href="@module.Route">@module.Name</NavLink>
+}
+
+<div class="lcars-rail__fill"></div>
+<div class="lcars-rail__cap"></div>
