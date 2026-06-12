@@ -26,6 +26,7 @@ public sealed class ScheduleEntry
     public OperationalMode? Mode { get; set; }
     public double? TargetTemperatureC { get; set; }
     public int? Fan { get; set; }
+    public Preset? Preset { get; set; }
 
     public string DaysSummary()
     {
@@ -42,6 +43,7 @@ public sealed class ScheduleEntry
         if (TargetTemperatureC is { } t)
             parts.Add(unit == TemperatureUnit.Fahrenheit ? $"{AppPreferences.CtoF(t):0}°F" : $"{t:0.#}°C");
         if (Fan is { } f) parts.Add($"fan {FanName(f)}");
+        if (Preset is { } pr) parts.Add(pr.ToString());
         return string.Join(" · ", parts);
     }
 

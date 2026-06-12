@@ -27,7 +27,13 @@ public sealed class SetStateRequest
         Mode = s.Mode,
         FanSpeed = s.FanSpeed,
         Eco = s.Eco,
-        SwingMode = s.SwingMode,
+        SwingMode = s.Swing switch
+        {
+            Ac.SwingMode.Both => 0xF,
+            Ac.SwingMode.Vertical => 0xC,
+            Ac.SwingMode.Horizontal => 0x3,
+            _ => 0x0,
+        },
         Turbo = s.Turbo,
         Fahrenheit = s.Fahrenheit,
         Sleep = s.Sleep,

@@ -5,16 +5,15 @@ using MiniController.Core.Ac;
 namespace MiniController.Web.Services;
 
 /// <summary>
-/// Talks to the SLWF-01Pro's ESPHome web server. State is read from the SSE
-/// /events stream (an initial burst dumps every entity); commands go to
-/// POST /climate/{id}/set. ESPHome speaks °C and folds power into the mode
-/// (OFF is a mode), so this maps that vocabulary onto AcStatus.
+/// Talks to the SLWF-01Pro's ESPHome web server. State is read with one-shot REST
+/// GETs (climate entity + the sensors/switch, fetched in parallel). Commands go to
+/// POST /climate|/switch|/button endpoints. ESPHome speaks °C and folds power into
+/// the mode (OFF is a mode), so this maps that vocabulary onto AcStatus.
 /// </summary>
 public sealed class EspHomeClimateTransport : IClimateTransport
 {
     private readonly HttpClient _http;
-    private readonly string _climateId;
-    private readonly string _outdoorSensorId;
+    private readonly string _id;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     // Remembered so "power on" can restore a running mode (ESPHome has no separate power).
@@ -27,8 +26,7 @@ public sealed class EspHomeClimateTransport : IClimateTransport
             BaseAddress = new Uri($"http://{host}"),
             Timeout = TimeSpan.FromSeconds(10),
         };
-        _climateId = climateId;
-        _outdoorSensorId = $"{climateId}_outdoor_temperature";
+        _id = climateId;
     }
 
     public async Task<AcStatus> RefreshAsync(CancellationToken ct = default)
@@ -39,81 +37,134 @@ public sealed class EspHomeClimateTransport : IClimateTransport
     }
 
     public Task<AcStatus> SetPowerAsync(bool on, CancellationToken ct = default) =>
-        Command(on ? $"mode={ModeToEsp(_lastRunningMode)}" : "mode=OFF", ct);
+        Command($"/climate/{_id}/set?mode={(on ? ModeToEsp(_lastRunningMode) : "OFF")}", ct);
 
     public Task<AcStatus> SetModeAsync(OperationalMode mode, CancellationToken ct = default) =>
-        Command($"mode={ModeToEsp(mode)}", ct);
+        Command($"/climate/{_id}/set?mode={ModeToEsp(mode)}", ct);
 
     public Task<AcStatus> SetTemperatureAsync(double celsius, CancellationToken ct = default) =>
-        Command($"target_temperature={Math.Clamp(celsius, 16, 30).ToString("0.0", CultureInfo.InvariantCulture)}", ct);
+        Command($"/climate/{_id}/set?target_temperature={Math.Clamp(celsius, 16, 30).ToString("0.0", CultureInfo.InvariantCulture)}", ct);
 
     public Task<AcStatus> SetFanAsync(int fanSpeed, CancellationToken ct = default) =>
-        Command(FanQuery(fanSpeed), ct);
+        Command($"/climate/{_id}/set?{FanQuery(fanSpeed)}", ct);
 
-    private async Task<AcStatus> Command(string query, CancellationToken ct)
+    public Task<AcStatus> SetPresetAsync(Preset preset, CancellationToken ct = default) =>
+        Command($"/climate/{_id}/set?preset={preset.ToString().ToUpperInvariant()}", ct);
+
+    public Task<AcStatus> SetSwingAsync(SwingMode swing, CancellationToken ct = default) =>
+        Command($"/climate/{_id}/set?swing_mode={swing.ToString().ToUpperInvariant()}", ct);
+
+    public Task<AcStatus> SetBeeperAsync(bool on, CancellationToken ct = default) =>
+        Command($"/switch/{_id}_beeper/{(on ? "turn_on" : "turn_off")}", ct);
+
+    public Task<AcStatus> ToggleDisplayAsync(CancellationToken ct = default) =>
+        Command($"/button/{_id}_display_toggle/press", ct);
+
+    public Task<AcStatus> SwingStepAsync(CancellationToken ct = default) =>
+        Command($"/button/{_id}_swing_step/press", ct);
+
+    private async Task<AcStatus> Command(string path, CancellationToken ct)
     {
         await _gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            using var resp = await _http.PostAsync($"/climate/{_climateId}/set?{query}", null, ct).ConfigureAwait(false);
+            using var resp = await _http.PostAsync(path, null, ct).ConfigureAwait(false);
             resp.EnsureSuccessStatusCode();
-            // Give the unit a beat to apply before reading back.
-            await Task.Delay(600, ct).ConfigureAwait(false);
+            await Task.Delay(600, ct).ConfigureAwait(false); // let the unit apply before reading back
             return await ReadStateAsync(ct).ConfigureAwait(false);
         }
         finally { _gate.Release(); }
     }
 
-    /// <summary>Read current state via one-shot REST GETs (no per-call event stream).</summary>
+    // ---- state read (parallel REST GETs) ----
+
+    private sealed record ClimateState(
+        string Mode, string? FanMode, string? Preset, string? SwingMode,
+        double? Current, double Target);
+
     private async Task<AcStatus> ReadStateAsync(CancellationToken ct)
     {
-        using var climateResp = await _http.GetAsync($"/climate/{_climateId}", ct).ConfigureAwait(false);
-        climateResp.EnsureSuccessStatusCode();
-        using var climateDoc = JsonDocument.Parse(
-            await climateResp.Content.ReadAsStringAsync(ct).ConfigureAwait(false));
+        var climateTask = GetClimateAsync(ct);
+        var outdoorTask = GetSensorAsync($"{_id}_outdoor_temperature", ct);
+        var humidityTask = GetSensorAsync($"{_id}_indoor_humidity", ct);
+        var powerTask = GetSensorAsync($"{_id}_power_usage", ct);
+        var wifiTask = GetSensorAsync($"{_id}_wi-fi_signal", ct);
+        var uptimeTask = GetSensorAsync($"{_id}_uptime_days", ct);
+        var beeperTask = GetSwitchAsync($"{_id}_beeper", ct);
 
-        // Outdoor temperature is a separate sensor entity and is optional.
-        double? outdoor = null;
-        try
-        {
-            using var sensorResp = await _http.GetAsync($"/sensor/{_outdoorSensorId}", ct).ConfigureAwait(false);
-            if (sensorResp.IsSuccessStatusCode)
-            {
-                using var sensorDoc = JsonDocument.Parse(
-                    await sensorResp.Content.ReadAsStringAsync(ct).ConfigureAwait(false));
-                outdoor = ReadDouble(sensorDoc.RootElement, "value");
-            }
-        }
-        catch
-        {
-            // outdoor sensor is best-effort
-        }
+        await Task.WhenAll(climateTask, outdoorTask, humidityTask, powerTask, wifiTask, uptimeTask, beeperTask)
+            .ConfigureAwait(false);
 
-        return BuildStatus(climateDoc.RootElement, outdoor);
-    }
+        var c = climateTask.Result ?? throw new InvalidOperationException("No climate state from ESPHome device.");
 
-    private AcStatus BuildStatus(JsonElement c, double? outdoor)
-    {
-        var espMode = c.TryGetProperty("mode", out var m) ? m.GetString() ?? "OFF" : "OFF";
-        var powerOn = !string.Equals(espMode, "OFF", StringComparison.OrdinalIgnoreCase);
-        var mode = EspToMode(espMode);
+        var powerOn = !string.Equals(c.Mode, "OFF", StringComparison.OrdinalIgnoreCase);
+        var mode = EspToMode(c.Mode);
         if (powerOn) _lastRunningMode = mode;
 
-        var fan = c.TryGetProperty("fan_mode", out var f) ? f.GetString() : null;
-
-        // Outdoor sensor reports a bogus high value while the unit is off; hide it.
-        if (outdoor is { } o && (o < -40 || o > 70)) outdoor = null;
+        var outdoor = outdoorTask.Result;
+        if (outdoor is { } o && (o < -40 || o > 70)) outdoor = null; // bogus "off" reading
 
         return new AcStatus
         {
             PowerOn = powerOn,
             Mode = mode,
-            TargetTemperature = ReadDouble(c, "target_temperature") ?? 22,
-            FanSpeed = EspFanToSpeed(fan),
-            IndoorTemperature = ReadDouble(c, "current_temperature"),
+            TargetTemperature = c.Target,
+            FanSpeed = EspFanToSpeed(c.FanMode),
+            Preset = EspToPreset(c.Preset),
+            Swing = EspToSwing(c.SwingMode),
+            Beeper = beeperTask.Result ?? false,
+            IndoorTemperature = c.Current,
             OutdoorTemperature = outdoor,
+            IndoorHumidity = humidityTask.Result is > 0 ? humidityTask.Result : null,
+            PowerUsageW = powerTask.Result,
+            WifiSignalDbm = wifiTask.Result,
+            UptimeDays = uptimeTask.Result,
             Fahrenheit = false,
         };
+    }
+
+    private async Task<ClimateState?> GetClimateAsync(CancellationToken ct)
+    {
+        using var resp = await _http.GetAsync($"/climate/{_id}", ct).ConfigureAwait(false);
+        resp.EnsureSuccessStatusCode();
+        using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false));
+        var e = doc.RootElement;
+        return new ClimateState(
+            Mode: e.TryGetProperty("mode", out var m) ? m.GetString() ?? "OFF" : "OFF",
+            FanMode: e.TryGetProperty("fan_mode", out var f) ? f.GetString() : null,
+            Preset: e.TryGetProperty("preset", out var pr) ? pr.GetString() : null,
+            SwingMode: e.TryGetProperty("swing_mode", out var sw) ? sw.GetString() : null,
+            Current: ReadDouble(e, "current_temperature"),
+            Target: ReadDouble(e, "target_temperature") ?? 22);
+    }
+
+    private async Task<double?> GetSensorAsync(string id, CancellationToken ct)
+    {
+        try
+        {
+            using var resp = await _http.GetAsync($"/sensor/{id}", ct).ConfigureAwait(false);
+            if (!resp.IsSuccessStatusCode) return null;
+            using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false));
+            return ReadDouble(doc.RootElement, "value");
+        }
+        catch { return null; }
+    }
+
+    private async Task<bool?> GetSwitchAsync(string id, CancellationToken ct)
+    {
+        try
+        {
+            using var resp = await _http.GetAsync($"/switch/{id}", ct).ConfigureAwait(false);
+            if (!resp.IsSuccessStatusCode) return null;
+            using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false));
+            var v = doc.RootElement;
+            if (v.TryGetProperty("value", out var b) && b.ValueKind is JsonValueKind.True or JsonValueKind.False)
+                return b.GetBoolean();
+            if (v.TryGetProperty("state", out var s))
+                return string.Equals(s.GetString(), "ON", StringComparison.OrdinalIgnoreCase);
+            return null;
+        }
+        catch { return null; }
     }
 
     // ---- vocabulary mapping ----
@@ -144,7 +195,7 @@ public sealed class EspHomeClimateTransport : IClimateTransport
         (int)FanSpeed.Low => "fan_mode=LOW",
         (int)FanSpeed.Medium => "fan_mode=MEDIUM",
         (int)FanSpeed.High => "fan_mode=HIGH",
-        (int)FanSpeed.Full => "fan_mode=HIGH",
+        (int)FanSpeed.Turbo => "custom_fan_mode=turbo",
         _ => "fan_mode=AUTO",
     };
 
@@ -154,8 +205,24 @@ public sealed class EspHomeClimateTransport : IClimateTransport
         "MEDIUM" => (int)FanSpeed.Medium,
         "HIGH" => (int)FanSpeed.High,
         "SILENT" => (int)FanSpeed.Silent,
-        "TURBO" => (int)FanSpeed.Full,
+        "TURBO" => (int)FanSpeed.Turbo,
         _ => (int)FanSpeed.Auto,
+    };
+
+    private static Preset EspToPreset(string? preset) => (preset ?? "NONE").ToUpperInvariant() switch
+    {
+        "BOOST" => Preset.Boost,
+        "ECO" => Preset.Eco,
+        "SLEEP" => Preset.Sleep,
+        _ => Preset.None,
+    };
+
+    private static SwingMode EspToSwing(string? swing) => (swing ?? "OFF").ToUpperInvariant() switch
+    {
+        "BOTH" => SwingMode.Both,
+        "VERTICAL" => SwingMode.Vertical,
+        "HORIZONTAL" => SwingMode.Horizontal,
+        _ => SwingMode.Off,
     };
 
     /// <summary>ESPHome serializes numbers sometimes as strings ("27.5") and sometimes as numbers.</summary>

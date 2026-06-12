@@ -48,6 +48,14 @@
                             <div class="fs-4">@FormatTempNullable(s.OutdoorTemperature)</div>
                         </div>
                         <div class="col">
+                            <div class="text-muted small">Humidity</div>
+                            <div class="fs-4">@(s.IndoorHumidity is { } h ? $"{h:0}%" : "—")</div>
+                        </div>
+                        <div class="col">
+                            <div class="text-muted small">Power</div>
+                            <div class="fs-4">@(s.PowerUsageW is { } w ? $"{w:0} W" : "—")</div>
+                        </div>
+                        <div class="col">
                             <div class="text-muted small">Mode</div>
                             <div class="fs-5 mt-1">@(EffMode?.ToString() ?? "—")</div>
                         </div>
@@ -106,6 +114,44 @@
             </div>
         </div>
 
+        <div class="card mb-3">
+            <div class="card-body">
+                <h6 class="card-subtitle mb-2 text-muted">Preset</h6>
+                <div class="btn-group flex-wrap" role="group">
+                    @foreach (var preset in Enum.GetValues<Preset>())
+                    {
+                        <button class="btn @(EffPreset == preset ? "btn-primary" : "btn-outline-primary")"
+                                @onclick="() => SetPreset(preset)">@preset</button>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="card mb-3">
+            <div class="card-body">
+                <h6 class="card-subtitle mb-2 text-muted">Swing</h6>
+                <div class="btn-group flex-wrap" role="group">
+                    @foreach (var sw in Enum.GetValues<SwingMode>())
+                    {
+                        <button class="btn @(EffSwing == sw ? "btn-primary" : "btn-outline-primary")"
+                                @onclick="() => SetSwing(sw)">@sw</button>
+                    }
+                    <button class="btn btn-outline-secondary" @onclick="SwingStep">Step</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mb-3">
+            <div class="card-body">
+                <h6 class="card-subtitle mb-2 text-muted">Unit</h6>
+                <div class="d-flex gap-2 flex-wrap">
+                    <button class="btn @(EffBeeper ? "btn-primary" : "btn-outline-primary")"
+                            @onclick="ToggleBeeper">Beep: @(EffBeeper ? "On" : "Off")</button>
+                    <button class="btn btn-outline-primary" @onclick="ToggleDisplay">Toggle display</button>
+                </div>
+            </div>
+        </div>
+
         @if (!string.IsNullOrEmpty(Manager.LastError))
         {
             <div class="alert alert-danger">@Manager.LastError</div>
@@ -113,6 +159,10 @@
 
         <p class="text-muted small">
             Last update: @(Manager.LastUpdatedUtc?.ToLocalTime().ToString("g") ?? "never")
+            @if (s is not null)
+            {
+                <text> · Wi-Fi @(s.WifiSignalDbm is { } sig ? $"{sig:0} dBm" : "—") · Up @(s.UptimeDays is { } up ? $"{up:0.0} d" : "—")</text>
+            }
             · <a href="/system/climate/setup">Setup</a>
         </p>
     }
@@ -127,10 +177,16 @@
     private bool? _optPower;
     private OperationalMode? _optMode;
     private int? _optFan;
+    private Preset? _optPreset;
+    private SwingMode? _optSwing;
+    private bool? _optBeeper;
 
     private bool EffPower => _optPower ?? Manager.Status?.PowerOn ?? false;
     private OperationalMode? EffMode => _optMode ?? Manager.Status?.Mode;
     private int? EffFan => _optFan ?? Manager.Status?.FanSpeed;
+    private Preset? EffPreset => _optPreset ?? Manager.Status?.Preset;
+    private SwingMode? EffSwing => _optSwing ?? Manager.Status?.Swing;
+    private bool EffBeeper => _optBeeper ?? Manager.Status?.Beeper ?? false;
 
     protected override void OnInitialized()
     {
@@ -149,6 +205,9 @@
             if (_optPower == s.PowerOn) _optPower = null;
             if (_optMode == s.Mode) _optMode = null;
             if (_optFan == s.FanSpeed) _optFan = null;
+            if (_optPreset == s.Preset) _optPreset = null;
+            if (_optSwing == s.Swing) _optSwing = null;
+            if (_optBeeper == s.Beeper) _optBeeper = null;
 
             // Don't stomp the user's in-progress setpoint edit.
             if (!_setpointPending)
@@ -177,6 +236,28 @@
         _optFan = fan;
         if (!await Manager.SetFanAsync(fan)) _optFan = null;
     }
+
+    private async Task SetPreset(Preset preset)
+    {
+        _optPreset = preset;
+        if (!await Manager.SetPresetAsync(preset)) _optPreset = null;
+    }
+
+    private async Task SetSwing(SwingMode swing)
+    {
+        _optSwing = swing;
+        if (!await Manager.SetSwingAsync(swing)) _optSwing = null;
+    }
+
+    private async Task ToggleBeeper()
+    {
+        var target = !EffBeeper;
+        _optBeeper = target;
+        if (!await Manager.SetBeeperAsync(target)) _optBeeper = null;
+    }
+
+    private Task ToggleDisplay() => Manager.ToggleDisplayAsync();
+    private Task SwingStep() => Manager.SwingStepAsync();
 
     private Task Refresh() => Manager.RefreshAsync();
 

@@ -83,5 +83,8 @@ public sealed class ScheduleRunner(
 
         if (entry.Fan is { } fan)
             await manager.SetFanAsync(fan).ConfigureAwait(false);
+
+        if (entry.Preset is { } preset)
+            await manager.SetPresetAsync(preset).ConfigureAwait(false);
     }
 }
