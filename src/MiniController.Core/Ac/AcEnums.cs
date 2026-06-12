@@ -18,6 +18,21 @@ public enum OperationalMode
 }
 
 /// <summary>
+/// What the unit is currently doing (separate from the mode it's *set* to).
+/// In Auto mode, Action reveals whether the compressor is heating or cooling.
+/// </summary>
+public enum ClimateAction
+{
+    Unknown = 0,
+    Off,
+    Idle,
+    Cooling,
+    Heating,
+    Drying,
+    Fan,
+}
+
+/// <summary>
 /// Fan speed values. The unit accepts 0–100 plus 102 = Auto; these are the
 /// named steps msmart exposes. Low/Medium/High map to the LED bars.
 /// </summary>

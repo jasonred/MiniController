@@ -6,6 +6,9 @@ public sealed class AcStatus
     public bool PowerOn { get; init; }
     public double TargetTemperature { get; init; }
     public OperationalMode Mode { get; init; }
+
+    /// <summary>What the unit is actually doing right now (cooling, heating, idle...).</summary>
+    public ClimateAction Action { get; init; } = ClimateAction.Unknown;
     public int FanSpeed { get; init; }
     public int SwingMode { get; init; }
     public bool Turbo { get; init; }

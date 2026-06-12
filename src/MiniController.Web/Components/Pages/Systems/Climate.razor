@@ -50,6 +50,12 @@
                         <div class="col">
                             <div class="text-muted small">Mode</div>
                             <div class="fs-5 mt-1">@(EffMode?.ToString() ?? "—")</div>
+                            @if (s.PowerOn && s.Action is ClimateAction.Heating or ClimateAction.Cooling or ClimateAction.Drying or ClimateAction.Fan or ClimateAction.Idle)
+                            {
+                                <div class="small mt-1">
+                                    <span class="badge @ActionBadgeClass(s.Action)">@ActionLabel(s.Action)</span>
+                                </div>
+                            }
                         </div>
                     </div>
                 }
@@ -216,6 +222,26 @@
 
     private string FormatTemp(double c) => Prefs.Format(c);
     private string FormatTempNullable(double? c) => Prefs.FormatOrDash(c);
+
+    private static string ActionLabel(ClimateAction a) => a switch
+    {
+        ClimateAction.Cooling => "Cooling",
+        ClimateAction.Heating => "Heating",
+        ClimateAction.Drying => "Drying",
+        ClimateAction.Fan => "Fan",
+        ClimateAction.Idle => "Idle",
+        _ => "—",
+    };
+
+    private static string ActionBadgeClass(ClimateAction a) => a switch
+    {
+        ClimateAction.Cooling => "bg-info text-dark",
+        ClimateAction.Heating => "bg-warning text-dark",
+        ClimateAction.Drying => "bg-secondary",
+        ClimateAction.Fan => "bg-secondary",
+        ClimateAction.Idle => "bg-light text-dark",
+        _ => "bg-secondary",
+    };
 
     public void Dispose()
     {

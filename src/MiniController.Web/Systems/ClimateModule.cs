@@ -1,3 +1,4 @@
+using MiniController.Core.Ac;
 using MiniController.Web.Services;
 
 namespace MiniController.Web.Systems;
@@ -30,8 +31,9 @@ public sealed class ClimateModule : ISystemModule
 
     public async Task PollAsync(CancellationToken ct)
     {
-        if (_manager.IsConfigured)
-            await _manager.RefreshAsync(ct);
+        if (!_manager.IsConfigured) return;
+        await _manager.RefreshAsync(ct);
+        await _manager.EvaluateRegulationAsync(ct);
     }
 
     public SystemTileState GetTile()
@@ -46,7 +48,11 @@ public sealed class ClimateModule : ISystemModule
         var headline = s.IndoorTemperature is { } t
             ? _prefs.Format(t)
             : (s.PowerOn ? "ON" : "OFF");
-        var detail = $"{s.Mode} · set {_prefs.Format(s.TargetTemperature)} · {(s.PowerOn ? "ON" : "OFF")}";
+        // In Auto, the mode label hides whether it's heating or cooling — surface Action.
+        var modeLabel = s.PowerOn && s.Mode == OperationalMode.Auto && s.Action is ClimateAction.Cooling or ClimateAction.Heating
+            ? $"Auto ({s.Action})"
+            : s.Mode.ToString();
+        var detail = $"{modeLabel} · set {_prefs.Format(s.TargetTemperature)} · {(s.PowerOn ? "ON" : "OFF")}";
         return new SystemTileState(headline, detail, true, s.PowerOn);
     }
 }

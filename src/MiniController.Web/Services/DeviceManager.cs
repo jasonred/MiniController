@@ -96,12 +96,76 @@ public sealed class DeviceManager
 
     public Task<bool> SetPowerAsync(bool on) => RunAsync(t => t.SetPowerAsync(on), "Power");
 
-    public Task<bool> SetTemperatureAsync(double celsius) =>
-        RunAsync(t => t.SetTemperatureAsync(celsius), "Temperature");
+    public async Task<bool> SetTemperatureAsync(double celsius)
+    {
+        // Persist as the app's regulation target so the loop knows what to enforce.
+        Settings.AppTargetC = celsius;
+        await PersistSettingsAsync().ConfigureAwait(false);
+        return await RunAsync(t => t.SetTemperatureAsync(celsius), "Temperature").ConfigureAwait(false);
+    }
 
     public Task<bool> SetModeAsync(OperationalMode mode) => RunAsync(t => t.SetModeAsync(mode), "Mode");
 
     public Task<bool> SetFanAsync(int fanSpeed) => RunAsync(t => t.SetFanAsync(fanSpeed), "Fan");
+
+    /// <summary>
+    /// If app-side regulation is enabled, decide whether to flip power and/or
+    /// re-push the setpoint, then act. Caller should invoke this after a fresh poll.
+    /// Mode-agnostic: the app just decides ON vs OFF based on indoor vs target.
+    /// The unit's mode (Cool/Heat/Auto) determines what happens once powered on.
+    /// </summary>
+    public async Task EvaluateRegulationAsync(CancellationToken ct = default)
+    {
+        if (!Settings.RegulationEnabled) return;
+
+        IClimateTransport? transport;
+        lock (_sync) transport = _transport;
+        if (transport is null) return;
+
+        var status = Status;
+        if (status is null) return;
+        if (status.IndoorTemperature is not double indoor) return;
+
+        var target = Settings.AppTargetC;
+        var threshold = Math.Max(0.1, Settings.RegulationThresholdC);
+        var delta = Math.Abs(indoor - target);
+
+        // 1) Re-push setpoint if the unit drifted (e.g. someone touched the remote).
+        if (status.PowerOn && Math.Abs(status.TargetTemperature - target) > 0.1)
+        {
+            try { Status = await transport.SetTemperatureAsync(target, ct).ConfigureAwait(false); }
+            catch (Exception e) { _logger.LogWarning(e, "Regulation: setpoint sync failed."); }
+        }
+
+        // 2) Hysteresis on power (mode-agnostic):
+        //    OFF -> ON  when room has drifted past the threshold
+        //    ON  -> OFF when room is essentially at target
+        bool? want = null;
+        if (!status.PowerOn && delta > threshold) want = true;
+        else if (status.PowerOn && delta < 0.1) want = false;
+
+        if (want is bool on)
+        {
+            try
+            {
+                Status = await transport.SetPowerAsync(on, ct).ConfigureAwait(false);
+                LastError = null;
+                LastUpdatedUtc = DateTime.UtcNow;
+                NotifyChanged();
+            }
+            catch (Exception e)
+            {
+                LastError = e.GetBaseException().Message;
+                _logger.LogWarning(e, "Regulation: power toggle failed.");
+            }
+        }
+    }
+
+    private async Task PersistSettingsAsync()
+    {
+        try { await File.WriteAllTextAsync(_settingsPath, JsonSerializer.Serialize(Settings, JsonOpts)).ConfigureAwait(false); }
+        catch (Exception e) { _logger.LogWarning(e, "Failed to persist settings."); }
+    }
 
     private async Task<bool> RunAsync(Func<IClimateTransport, Task<AcStatus>> action, string label)
     {

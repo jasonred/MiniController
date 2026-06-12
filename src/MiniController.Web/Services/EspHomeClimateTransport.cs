@@ -100,6 +100,7 @@ public sealed class EspHomeClimateTransport : IClimateTransport
         if (powerOn) _lastRunningMode = mode;
 
         var fan = c.TryGetProperty("fan_mode", out var f) ? f.GetString() : null;
+        var action = c.TryGetProperty("action", out var a) ? a.GetString() : null;
 
         // Outdoor sensor reports a bogus high value while the unit is off; hide it.
         if (outdoor is { } o && (o < -40 || o > 70)) outdoor = null;
@@ -108,6 +109,7 @@ public sealed class EspHomeClimateTransport : IClimateTransport
         {
             PowerOn = powerOn,
             Mode = mode,
+            Action = EspToAction(action),
             TargetTemperature = ReadDouble(c, "target_temperature") ?? 22,
             FanSpeed = EspFanToSpeed(fan),
             IndoorTemperature = ReadDouble(c, "current_temperature"),
@@ -115,6 +117,17 @@ public sealed class EspHomeClimateTransport : IClimateTransport
             Fahrenheit = false,
         };
     }
+
+    private static ClimateAction EspToAction(string? action) => (action ?? "").ToUpperInvariant() switch
+    {
+        "COOLING" => ClimateAction.Cooling,
+        "HEATING" => ClimateAction.Heating,
+        "IDLE" => ClimateAction.Idle,
+        "DRYING" => ClimateAction.Drying,
+        "FAN" => ClimateAction.Fan,
+        "OFF" => ClimateAction.Off,
+        _ => ClimateAction.Unknown,
+    };
 
     // ---- vocabulary mapping ----
 
