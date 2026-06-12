@@ -15,4 +15,9 @@ public interface IClimateTransport : IDisposable
     Task<AcStatus> SetModeAsync(OperationalMode mode, CancellationToken ct = default);
     Task<AcStatus> SetTemperatureAsync(double celsius, CancellationToken ct = default);
     Task<AcStatus> SetFanAsync(int fanSpeed, CancellationToken ct = default);
+    Task<AcStatus> SetPresetAsync(Preset preset, CancellationToken ct = default);
+    Task<AcStatus> SetSwingAsync(SwingMode swing, CancellationToken ct = default);
+    Task<AcStatus> SetBeeperAsync(bool on, CancellationToken ct = default);
+    Task<AcStatus> ToggleDisplayAsync(CancellationToken ct = default);
+    Task<AcStatus> SwingStepAsync(CancellationToken ct = default);
 }

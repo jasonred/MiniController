@@ -47,7 +47,11 @@ public static class AcStateParser
             TargetTemperature = target,
             Mode = (OperationalMode)((p[2] >> 5) & 0x7),
             FanSpeed = p[3] & 0x7F,
-            SwingMode = p[7] & 0xF,
+            Preset = turbo ? Preset.Boost
+                : (p[9] & 0x10) != 0 ? Preset.Eco
+                : (p[10] & 0x1) != 0 ? Preset.Sleep
+                : Preset.None,
+            Swing = (p[7] & 0xF) == 0 ? SwingMode.Off : SwingMode.Both,
             Turbo = turbo,
             FollowMe = (p[8] & 0x80) != 0,
             Eco = (p[9] & 0x10) != 0,

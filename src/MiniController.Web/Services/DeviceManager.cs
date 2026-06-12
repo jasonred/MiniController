@@ -108,6 +108,16 @@ public sealed class DeviceManager
 
     public Task<bool> SetFanAsync(int fanSpeed) => RunAsync(t => t.SetFanAsync(fanSpeed), "Fan");
 
+    public Task<bool> SetPresetAsync(Preset preset) => RunAsync(t => t.SetPresetAsync(preset), "Preset");
+
+    public Task<bool> SetSwingAsync(SwingMode swing) => RunAsync(t => t.SetSwingAsync(swing), "Swing");
+
+    public Task<bool> SetBeeperAsync(bool on) => RunAsync(t => t.SetBeeperAsync(on), "Beeper");
+
+    public Task<bool> ToggleDisplayAsync() => RunAsync(t => t.ToggleDisplayAsync(), "Display");
+
+    public Task<bool> SwingStepAsync() => RunAsync(t => t.SwingStepAsync(), "SwingStep");
+
     /// <summary>
     /// If app-side regulation is enabled, decide whether to flip power and/or
     /// re-push the setpoint, then act. Caller should invoke this after a fresh poll.
